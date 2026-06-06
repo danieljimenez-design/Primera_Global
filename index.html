@@ -749,10 +749,16 @@ function ensureDays(p){
 function mapsLink(q,label){ const u=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
   return `<a class="maps-link" target="_blank" href="${u}"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>${esc(label||q)}</a>`; }
 function actBudgetUSD(a){ return (a.budget||[]).reduce((n,l)=>n+budgetUSD(l),0); }
+function actBudgetBadge(a){
+  const lines=a.budget||[]; if(!lines.length) return '';
+  const curs=[...new Set(lines.map(l=>l.currency).filter(Boolean))];
+  if(curs.length===1){ const sum=lines.reduce((n,l)=>n+(Number(l.amount)||0),0); return fmt(sum)+' '+curs[0]; }
+  return fmtUSD(actBudgetUSD(a)); // varias monedas: se muestra el total en USD
+}
 function activityRow(dayId,a){
-  const bud=actBudgetUSD(a);
+  const badge=actBudgetBadge(a);
   return `<div class="sec-item">
-    <div class="si-main"><div class="si-act">${a.time?`<span class="pill pill-blue" style="padding:1px 9px">${esc(a.time)}</span> `:''}${esc(a.name)}${bud>0?` <span class="pill pill-green" style="padding:1px 9px">💰 ${fmtUSD(bud)}</span>`:''}</div>
+    <div class="si-main"><div class="si-act">${a.time?`<span class="pill pill-blue" style="padding:1px 9px">${esc(a.time)}</span> `:''}${esc(a.name)}${badge?` <span class="pill pill-green" style="padding:1px 9px">💰 ${badge}</span>`:''}</div>
       <div class="si-sub">${a.location?mapsLink(a.location):''}${a.notes?`<span>📝 ${esc(a.notes)}</span>`:''}${(a.budget||[]).length?`<span>🧾 ${(a.budget||[]).length} línea${(a.budget||[]).length!==1?'s':''} de gasto</span>`:''}</div></div>
     <button class="icon-btn" onclick="openActForm('${dayId}','${a.id}')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M11 4H4v16h16v-7M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4z"/></svg></button>
     <button class="icon-btn del" onclick="delAct('${dayId}','${a.id}')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button></div>`;
