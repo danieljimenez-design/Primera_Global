@@ -287,6 +287,35 @@ td b{color:var(--ink);font-weight:700}
 }
 .menu-btn{display:none;width:38px;height:38px;border-radius:9px;align-items:center;justify-content:center;background:var(--white);border:1px solid var(--line)}
 .menu-btn svg{width:20px;height:20px;stroke:var(--ink)}
+
+/* ---- Cronograma: tarjetas de día ---- */
+.day-card{border:1px solid var(--line);border-radius:var(--r);margin-bottom:14px;background:var(--white);box-shadow:var(--shadow-sm);overflow:hidden}
+.day-head{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--blue-pale2);border-bottom:1px solid var(--line)}
+.day-date{font-family:'Bricolage Grotesque';font-weight:800;font-size:16px;color:var(--ink)}
+.day-dow{font-size:11.5px;color:var(--muted);font-weight:700}
+.day-body{padding:13px 16px;display:flex;flex-direction:column;gap:9px}
+.day-logi{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:2px}
+.day-logi .li{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:5px 12px}
+.day-logi .li .muted{font-weight:500}
+.flight-item{display:flex;align-items:center;gap:12px;border:1px solid var(--blue-light);background:linear-gradient(100deg,var(--blue-pale),#fff);border-radius:var(--r-sm);padding:11px 14px}
+.flight-item .fi-route{font-weight:700;color:var(--ink);font-size:14px}
+.flight-item .fi-sub{font-size:12px;color:var(--muted);font-weight:600;margin-top:2px}
+.flight-ico{width:30px;height:30px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;flex-shrink:0}
+
+/* ---- Perfil del estudiante ---- */
+.profile-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0}
+.pf-group{border:1px solid var(--line);border-radius:var(--r-sm);padding:14px 16px;margin:0 0 12px}
+.pf-group h4{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--blue-700);margin-bottom:10px;display:flex;align-items:center;gap:7px}
+.pf-rows{display:grid;grid-template-columns:1fr 1fr;gap:9px 18px}
+.pf-row{font-size:13px}
+.pf-row .k{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.pf-row .v{color:var(--ink);font-weight:600}
+.pf-row .v.empty{color:var(--muted-2);font-weight:500}
+.pf-head{display:flex;align-items:center;gap:15px;margin-bottom:16px}
+.pf-avatar{width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue-700));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;font-family:'Bricolage Grotesque';flex-shrink:0}
+.pf-head h2{font-size:23px;font-weight:800}
+.pf-head .pf-meta{font-size:13px;color:var(--muted);font-weight:600}
+@media(max-width:560px){.pf-rows{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -428,6 +457,7 @@ async function loadState(){
     setSync('local');
   }
   if(!state.programs) state.programs=[];
+  normalizeAll();
 }
 
 /* ---- guardar (se llama en cada cambio) ---- */
@@ -464,7 +494,7 @@ async function pollRemote(){
     const r=await fetch(BACKEND_URL,{method:'GET',redirect:'follow'});
     const j=await r.json();
     if(j&&j.updatedAt && j.updatedAt!==lastSync){
-      state=j.data||{programs:[]}; if(!state.programs) state.programs=[];
+      state=j.data||{programs:[]}; if(!state.programs) state.programs=[]; normalizeAll();
       lastSync=j.updatedAt; render();
       setSync('ok', j.by);
       if(j.by && j.by!==userName) toast('🔄 Actualizado por '+j.by);
@@ -502,6 +532,23 @@ async function changeUser(){
   const n=prompt('Tu nombre:',userName);
   if(n&&n.trim()){ userName=n.trim(); await Local.set(NAME_KEY,userName); setSync('ok'); }
 }
+/* ---- normalización / migración de datos (no pierde info de versiones previas) ---- */
+function normalizeProgram(p){
+  p.countries=p.countries||[]; p.sections=p.sections||[]; p.budget=p.budget||[];
+  p.expenses=p.expenses||[]; p.tasks=p.tasks||[]; p.participants=p.participants||[];
+  p.flights=p.flights||[];
+  if(!p.student||typeof p.student!=='object') p.student={};
+  if(!Array.isArray(p.schedule)) p.schedule=[];
+  p.schedule.forEach(d=>{
+    if(!d.activities){                       // formato viejo: una sola actividad por día
+      d.activities=[];
+      if(d.activity) d.activities.push({id:uid(),time:'',name:d.activity,location:d.location||'',notes:''});
+    }
+    delete d.activity; delete d.location;    // ya migrado a activities[]
+    d.accommodation=d.accommodation||''; d.transport=d.transport||''; d.responsible=d.responsible||''; d.notes=d.notes||'';
+  });
+}
+function normalizeAll(){ (state.programs||[]).forEach(normalizeProgram); }
 function getProg(){ return state.programs.find(p=>p.id===cur.programId); }
 
 /* ===================== RENDER ROUTER ===================== */
@@ -558,8 +605,8 @@ function viewDashboard(){
         <div class="pc-meta">📅 ${fdate(p.startDate)} — ${fdate(p.endDate)} · ${stats.days} días</div>
         <div class="pc-stats">
           <div class="pc-stat"><div class="n">${p.countries.length}</div><div class="l">Países</div></div>
-          <div class="pc-stat"><div class="n">${stats.scheduled}</div><div class="l">Días plan.</div></div>
-          <div class="pc-stat"><div class="n">${p.participants.length}</div><div class="l">Particip.</div></div>
+          <div class="pc-stat"><div class="n">${stats.scheduled}</div><div class="l">Activid.</div></div>
+          <div class="pc-stat"><div class="n">${(p.flights||[]).length}</div><div class="l">Vuelos</div></div>
           <div class="pc-stat"><div class="n">${stats.openTasks}</div><div class="l">Tareas</div></div>
         </div>
       </div></div>`;
@@ -574,7 +621,7 @@ function viewDashboard(){
 
 function progStats(p){
   const days=daysBetween(p.startDate,p.endDate);
-  const scheduled=p.schedule.length;
+  const scheduled=(p.schedule||[]).reduce((n,d)=>n+((d.activities||[]).length),0);
   const openTasks=p.tasks.filter(t=>!t.done).length;
   let spentUSD=0; p.expenses.forEach(e=>spentUSD+=expUSD(e));
   let plannedUSD=0; p.budget.forEach(b=>plannedUSD+=budgetUSD(b));
@@ -583,18 +630,19 @@ function progStats(p){
 
 /* ===================== PROGRAM VIEW ===================== */
 const TABS=[
-  ['resumen','Resumen','M3 12l2-2 ...'],
+  ['resumen','Resumen'],
+  ['estudiante','Estudiante'],
   ['paises','Países y Secciones'],
   ['cronograma','Cronograma'],
   ['presupuesto','Presupuesto'],
   ['gastos','Gastos reales'],
   ['reembolsos','Reembolsos'],
-  ['tareas','Tareas'],
-  ['participantes','Participantes']
+  ['tareas','Tareas']
 ];
 function viewProgram(p){
-  const counts={paises:p.countries.length,cronograma:p.schedule.length,presupuesto:p.budget.length,
-    gastos:p.expenses.length,tareas:p.tasks.filter(t=>!t.done).length,participantes:p.participants.length};
+  const acts=(p.schedule||[]).reduce((n,d)=>n+((d.activities||[]).length),0);
+  const counts={paises:p.countries.length,cronograma:acts,presupuesto:p.budget.length,
+    gastos:p.expenses.length,tareas:p.tasks.filter(t=>!t.done).length};
   const tabs=TABS.map(([id,label])=>`<button class="tab ${cur.tab===id?'active':''}" onclick="setTab('${id}')">${label}${counts[id]!==undefined?`<span class="cnt">${counts[id]}</span>`:''}</button>`).join('');
   return `<div class="page-head"><div class="ph-text">
       <h1>${esc(p.name)}</h1>
@@ -614,7 +662,7 @@ function renderTab(p){
     case 'gastos': return tabGastos(p);
     case 'reembolsos': return tabReembolsos(p);
     case 'tareas': return tabTareas(p);
-    case 'participantes': return tabParticipantes(p);
+    case 'estudiante': return tabEstudiante(p);
   }
 }
 function setTab(t){ cur.tab=t; document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.getAttribute('onclick').includes(`'${t}'`))); document.getElementById('tabContent').innerHTML=renderTab(getProg()); }
@@ -679,30 +727,82 @@ function tabPaises(p){
 }
 
 /* ---------- CRONOGRAMA ---------- */
+/* ---------- CRONOGRAMA ---------- */
+function dow(dstr){ try{ const d=new Date(dstr+'T00:00'); return ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'][d.getDay()]; }catch(e){ return ''; } }
+function eachDate(start,end){ const out=[]; if(!start||!end) return out; let d=new Date(start+'T00:00'); const e=new Date(end+'T00:00'); let guard=0; while(d<=e && guard<3660){ out.push(d.toISOString().slice(0,10)); d.setDate(d.getDate()+1); guard++; } return out; }
+function countryForDate(p,date){ const c=p.countries.find(c=>c.startDate&&c.endDate&&date>=c.startDate&&date<=c.endDate); return c?c.id:''; }
+function ensureDays(p){
+  if(!Array.isArray(p.schedule)) p.schedule=[];
+  const dates=eachDate(p.startDate,p.endDate); const set=new Set(dates);
+  p.schedule=p.schedule.filter(d=>set.has(d.date));            // quitar días fuera de rango
+  dates.forEach(dt=>{
+    let day=p.schedule.find(d=>d.date===dt);
+    if(!day){ day={id:'d'+dt,date:dt,countryId:countryForDate(p,dt),accommodation:'',transport:'',responsible:'',notes:'',activities:[]}; p.schedule.push(day); }
+    if(!day.countryId) day.countryId=countryForDate(p,dt);
+    if(!day.activities) day.activities=[];
+  });
+  p.schedule.sort((a,b)=>a.date.localeCompare(b.date));
+}
+function mapsLink(q,label){ const u=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+  return `<a class="maps-link" target="_blank" href="${u}"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>${esc(label||q)}</a>`; }
+function activityRow(dayId,a){
+  return `<div class="sec-item">
+    <div class="si-main"><div class="si-act">${a.time?`<span class="pill pill-blue" style="padding:1px 9px">${esc(a.time)}</span> `:''}${esc(a.name)}</div>
+      <div class="si-sub">${a.location?mapsLink(a.location):''}${a.notes?`<span>📝 ${esc(a.notes)}</span>`:''}</div></div>
+    <button class="icon-btn" onclick="openActForm('${dayId}','${a.id}')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M11 4H4v16h16v-7M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4z"/></svg></button>
+    <button class="icon-btn del" onclick="delAct('${dayId}','${a.id}')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button></div>`;
+}
+function flightItem(f){
+  return `<div class="flight-item"><div class="flight-ico">✈</div>
+    <div style="flex:1"><div class="fi-route">${esc(f.fromCity||f.fromAirport||'—')} → ${esc(f.toCity||f.toAirport||'—')}${f.flightNo?` · ${esc(f.flightNo)}`:''}</div>
+      <div class="fi-sub">${f.airline?esc(f.airline)+' · ':''}${f.depTime?'Sale '+esc(f.depTime):''}${f.arrTime?' · Llega '+esc(f.arrTime):''}${f.confirmation?' · Conf. '+esc(f.confirmation):''}</div></div>
+    <button class="icon-btn" onclick="openFlightForm('${f.id}')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M11 4H4v16h16v-7M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4z"/></svg></button>
+    <button class="icon-btn del" onclick="delFlight('${f.id}')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button></div>`;
+}
 function tabCronograma(p){
-  const rows=[...p.schedule].sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-  const body=rows.length?rows.map(d=>{
+  ensureDays(p);
+  const flights=[...(p.flights||[])].sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.depTime||'').localeCompare(b.depTime||''));
+  const flightTable=flights.length
+    ? `<div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Ruta</th><th>Aerolínea / Vuelo</th><th>Horario</th><th>Confirmación</th><th></th></tr></thead><tbody>`
+      +flights.map(f=>`<tr><td><b>${fdate(f.date)}</b></td>
+        <td>${esc(f.fromCity||f.fromAirport||'—')} → ${esc(f.toCity||f.toAirport||'—')}</td>
+        <td>${esc(f.airline||'—')}<div class="task-meta">${esc(f.flightNo||'')}</div></td>
+        <td>${f.depTime?esc(f.depTime):'—'}${f.arrTime?' → '+esc(f.arrTime):''}</td>
+        <td>${esc(f.confirmation||'—')}</td>
+        <td class="t-right"><div class="cell-actions">
+          <button class="icon-btn" onclick="openFlightForm('${f.id}')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M11 4H4v16h16v-7M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4z"/></svg></button>
+          <button class="icon-btn del" onclick="delFlight('${f.id}')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button></div></td></tr>`).join('')
+      +`</tbody></table></div>`
+    : `<div class="center muted" style="padding:18px">Sin vuelos. Al agregarlos aparecen aquí y también dentro de su día en el cronograma.</div>`;
+  const flightPanel=`<div class="panel"><div class="panel-head"><div class="ico-wrap"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M17.8 19.2L16 11l3.5-3.5a2.1 2.1 0 00-3-3L13 8 4.8 6.2a.5.5 0 00-.5.8L8 11l-3 3H3l1.5 2.5L7 18l2-3 3 3.8.8-.5z"/></svg></div><h3>Vuelos del programa</h3>
+      <button class="btn btn-blue btn-sm" onclick="openFlightForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Agregar vuelo</button></div>
+      <div class="panel-body flush">${flightTable}</div></div>`;
+  const days=p.schedule.map(d=>{
     const co=p.countries.find(c=>c.id===d.countryId);
-    const mapUrl=d.location?`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(d.location)}`:'';
-    return `<tr>
-      <td><b>${fdate(d.date)}</b>${co?`<div class="task-meta">${flagFor(co.name)} ${esc(co.name)}</div>`:''}</td>
-      <td>${esc(d.activity)||'—'}</td>
-      <td>${esc(d.accommodation)||'<span class="muted">—</span>'}</td>
-      <td>${esc(d.responsible)||'<span class="muted">—</span>'}</td>
-      <td>${esc(d.transport)||'<span class="muted">—</span>'}</td>
-      <td>${d.location?`<a class="maps-link" target="_blank" href="${mapUrl}"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>${esc(d.location).slice(0,22)}</a>`:'<span class="muted">—</span>'}</td>
-      <td class="t-right"><div class="cell-actions">
-        <button class="icon-btn" onclick="openDayForm('${d.id}')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M11 4H4v16h16v-7M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4z"/></svg></button>
-        <button class="icon-btn del" onclick="delDay('${d.id}')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>
-      </div></td></tr>`;
-  }).join(''):`<tr><td colspan="7" class="center muted" style="padding:34px">Sin días en el cronograma. Agrega el primero abajo.</td></tr>`;
+    const dayFlights=flights.filter(f=>f.date===d.date);
+    const acts=(d.activities||[]).slice().sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+    return `<div class="day-card">
+      <div class="day-head"><div style="flex:1">
+          <div class="day-date">${fdate(d.date)} <span class="day-dow">· ${dow(d.date)}</span></div>
+          ${co?`<div class="day-dow">${flagFor(co.name)} ${esc(co.name)}</div>`:'<div class="day-dow muted">Sin país asignado</div>'}</div>
+        <button class="btn btn-ghost btn-sm" onclick="openDayLogi('${d.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4v16h16v-7M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4z"/></svg>Logística</button></div>
+      <div class="day-body">
+        <div class="day-logi">
+          <span class="li">🏨 ${d.accommodation?esc(d.accommodation):'<span class="muted">Alojamiento —</span>'}</span>
+          <span class="li">🚐 ${d.transport?esc(d.transport):'<span class="muted">Transporte —</span>'}</span>
+          <span class="li">👤 ${d.responsible?esc(d.responsible):'<span class="muted">Encargado —</span>'}</span>
+        </div>
+        ${dayFlights.map(flightItem).join('')}
+        ${acts.map(a=>activityRow(d.id,a)).join('')}
+        ${d.notes?`<div class="si-sub" style="padding:2px 4px"><span>📝 ${esc(d.notes)}</span></div>`:''}
+        <button class="add-inline" onclick="openActForm('${d.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Agregar actividad</button>
+      </div></div>`;
+  }).join('');
   return `<div class="help"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-      <div>Detalle día a día: <b>alojamiento</b>, <b>actividad</b>, <b>encargado</b>, <b>transporte</b> y <b>ubicación</b> (el enlace abre Google Maps).</div></div>
-    <div class="panel"><div class="panel-head"><div class="ico-wrap"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/></svg></div><h3>Cronograma detallado</h3>
-      <button class="btn btn-blue btn-sm" onclick="openDayForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Agregar día</button></div>
-      <div class="panel-body flush"><div class="tbl-wrap"><table>
-        <thead><tr><th>Fecha / País</th><th>Actividad</th><th>Alojamiento</th><th>Encargado</th><th>Transporte</th><th>Ubicación</th><th></th></tr></thead>
-        <tbody>${body}</tbody></table></div></div></div>`;
+      <div>Los días ya están creados según las fechas del programa. Cada día tiene <b>una</b> logística (alojamiento, transporte, encargado) y puede tener <b>varias actividades</b>, cada una con su hora y ubicación. Los <b>vuelos</b> se agregan arriba y aparecen solos en su día.</div></div>
+    ${flightPanel}
+    <div class="panel-head" style="padding:0 2px 12px"><h3 style="font-size:17px">Día a día</h3></div>
+    ${days||'<div class="center muted" style="padding:30px">Define las fechas del programa para generar los días.</div>'}`;
 }
 
 /* ---------- PRESUPUESTO ---------- */
@@ -813,20 +913,100 @@ function tabTareas(p){
 }
 
 /* ---------- PARTICIPANTES ---------- */
-function tabParticipantes(p){
+/* ---------- ESTUDIANTE ---------- */
+function ageFrom(bd){ if(!bd) return ''; try{ const b=new Date(bd+'T00:00'),n=new Date(); let a=n.getFullYear()-b.getFullYear(); const m=n.getMonth()-b.getMonth(); if(m<0||(m===0&&n.getDate()<b.getDate()))a--; return (a>=0&&a<130)?a:''; }catch(e){ return ''; } }
+function pfRow(k,v){ return `<div class="pf-row"><div class="k">${k}</div><div class="v ${v?'':'empty'}">${v?esc(v):'—'}</div></div>`; }
+function tabEstudiante(p){
+  const s=p.student||{};
+  const hasData=Object.values(s).some(v=>v&&String(v).trim());
+  const acomp=acompPanel(p);
+  if(!hasData){
+    return `<div class="empty"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/></svg></div>
+      <h3>Sin datos del estudiante</h3>
+      <p>Registra la información del estudiante: datos personales, documentos, salud, acudiente y observaciones a tener en cuenta.</p>
+      <button class="btn btn-blue" style="margin:0 auto" onclick="openStudentProfile()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Completar datos del estudiante</button></div>${acomp}`;
+  }
+  const age=ageFrom(s.birthdate)||s.age||'';
+  const init=(s.fullName||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  return `<div class="panel"><div class="panel-body">
+    <div class="pf-head"><div class="pf-avatar">${esc(init)||'?'}</div>
+      <div style="flex:1"><h2>${esc(s.fullName||'Estudiante')}</h2>
+        <div class="pf-meta">${[age?age+' años':'',s.nationality,s.school].filter(Boolean).map(esc).join(' · ')||'—'}</div></div>
+      <button class="btn btn-ghost btn-sm" onclick="openStudentProfile()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4v16h16v-7M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4z"/></svg>Editar</button></div>
+    <div class="pf-group"><h4>👤 Datos personales</h4><div class="pf-rows">
+      ${pfRow('Nombre completo',s.fullName)}${pfRow('Fecha de nacimiento',s.birthdate?fdate(s.birthdate):'')}
+      ${pfRow('Edad',age?age+' años':'')}${pfRow('Género',s.gender)}
+      ${pfRow('Nacionalidad',s.nationality)}${pfRow('Idiomas',s.languages)}</div></div>
+    <div class="pf-group"><h4>🪪 Documentos</h4><div class="pf-rows">
+      ${pfRow('Tipo de documento',s.docType)}${pfRow('N° de documento',s.docNumber)}
+      ${pfRow('Pasaporte',s.passport)}${pfRow('Vencimiento pasaporte',s.passportExp?fdate(s.passportExp):'')}</div></div>
+    <div class="pf-group"><h4>✉ Contacto y estudios</h4><div class="pf-rows">
+      ${pfRow('Email',s.email)}${pfRow('Teléfono',s.phone)}
+      ${pfRow('Ciudad',s.city)}${pfRow('Dirección',s.address)}
+      ${pfRow('Institución educativa',s.school)}${pfRow('Nivel / grado',s.level)}</div></div>
+    <div class="pf-group"><h4>🩺 Salud y seguro</h4><div class="pf-rows">
+      ${pfRow('Tipo de sangre',s.bloodType)}${pfRow('Alergias',s.allergies)}
+      ${pfRow('Condiciones médicas',s.medical)}${pfRow('Restricciones alimentarias',s.dietary)}
+      ${pfRow('Aseguradora',s.insurer)}${pfRow('N° de póliza',s.policyNumber)}</div></div>
+    <div class="pf-group"><h4>👪 Acudiente y emergencia</h4><div class="pf-rows">
+      ${pfRow('Acudiente',s.guardianName)}${pfRow('Parentesco',s.guardianRelation)}
+      ${pfRow('Tel. acudiente',s.guardianPhone)}${pfRow('Email acudiente',s.guardianEmail)}
+      ${pfRow('Contacto de emergencia',s.emergency)}${pfRow('Tel. emergencia',s.emergencyPhone)}</div></div>
+    ${s.notes?`<div class="pf-group"><h4>📝 Información a tener en cuenta</h4><div style="font-size:13.5px;color:var(--ink-2);white-space:pre-wrap;line-height:1.6">${esc(s.notes)}</div></div>`:''}
+  </div></div>${acomp}`;
+}
+function acompPanel(p){
   const rows=p.participants.length?p.participants.map(s=>`<tr>
       <td><b>${esc(s.name)}</b>${s.age?`<div class="task-meta">${esc(s.age)} años</div>`:''}</td>
       <td>${esc(s.email)||'—'}<div class="task-meta">${esc(s.phone)||''}</div></td>
       <td>${esc(s.origin)||'—'}</td>
       <td>${esc(s.emergency)||'<span class="muted">—</span>'}</td>
-      <td>${esc(s.notes)||'<span class="muted">—</span>'}</td>
       <td class="t-right"><div class="cell-actions">
         <button class="icon-btn" onclick="openStudentForm('${s.id}')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M11 4H4v16h16v-7M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4z"/></svg></button>
         <button class="icon-btn del" onclick="delStudent('${s.id}')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>
-      </div></td></tr>`).join(''):`<tr><td colspan="6" class="center muted" style="padding:30px">Sin participantes registrados.</td></tr>`;
-  return `<div class="panel"><div class="panel-head"><div class="ico-wrap"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div><h3>Participantes</h3>
-      <button class="btn btn-blue btn-sm" onclick="openStudentForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Agregar participante</button></div>
-      <div class="panel-body flush"><div class="tbl-wrap"><table><thead><tr><th>Nombre</th><th>Contacto</th><th>Origen</th><th>Contacto emergencia</th><th>Notas</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
+      </div></td></tr>`).join(''):`<tr><td colspan="5" class="center muted" style="padding:24px">Sin acompañantes. Úsalo solo si el programa lleva más de una persona.</td></tr>`;
+  return `<div class="panel"><div class="panel-head"><div class="ico-wrap"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div><h3>Acompañantes / otros participantes</h3>
+      <button class="btn btn-ghost btn-sm" onclick="openStudentForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Agregar</button></div>
+      <div class="panel-body flush"><div class="tbl-wrap"><table><thead><tr><th>Nombre</th><th>Contacto</th><th>Origen</th><th>Emergencia</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
+}
+function openStudentProfile(){
+  const p=getProg(); const s=p.student||{};
+  const F=(id,lbl,val2,ph,type)=>`<div class="field"><label>${lbl}</label><input ${type?`type="${type}"`:''} id="${id}" value="${esc(val2||'')}" placeholder="${ph||''}"></div>`;
+  showModal(`<div class="modal wide"><div class="modal-head"><h2>Datos del estudiante</h2><button class="x-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <div class="pf-group"><h4>👤 Datos personales</h4>
+        ${F('sp_name','Nombre completo *',s.fullName,'Nombre y apellidos')}
+        <div class="frow c3">${F('sp_birth','Nacimiento',s.birthdate,'',"date")}${F('sp_gender','Género',s.gender)}${F('sp_nat','Nacionalidad',s.nationality)}</div>
+        ${F('sp_lang','Idiomas',s.languages,'Español, inglés…')}</div>
+      <div class="pf-group"><h4>🪪 Documentos</h4>
+        <div class="frow c2">${F('sp_doctype','Tipo de documento',s.docType,'CC / TI / Pasaporte')}${F('sp_docnum','N° de documento',s.docNumber)}</div>
+        <div class="frow c2">${F('sp_pass','Pasaporte',s.passport)}${F('sp_passexp','Vence pasaporte',s.passportExp,'',"date")}</div></div>
+      <div class="pf-group"><h4>✉ Contacto y estudios</h4>
+        <div class="frow c2">${F('sp_email','Email',s.email)}${F('sp_phone','Teléfono',s.phone)}</div>
+        <div class="frow c2">${F('sp_city','Ciudad',s.city)}${F('sp_addr','Dirección',s.address)}</div>
+        <div class="frow c2">${F('sp_school','Institución educativa',s.school)}${F('sp_level','Nivel / grado',s.level)}</div></div>
+      <div class="pf-group"><h4>🩺 Salud y seguro</h4>
+        <div class="frow c2">${F('sp_blood','Tipo de sangre',s.bloodType,'O+')}${F('sp_allergy','Alergias',s.allergies)}</div>
+        <div class="frow c2">${F('sp_medical','Condiciones médicas',s.medical)}${F('sp_diet','Restricciones alimentarias',s.dietary)}</div>
+        <div class="frow c2">${F('sp_insurer','Aseguradora',s.insurer)}${F('sp_policy','N° de póliza',s.policyNumber)}</div></div>
+      <div class="pf-group"><h4>👪 Acudiente y emergencia</h4>
+        <div class="frow c2">${F('sp_gname','Acudiente',s.guardianName)}${F('sp_grel','Parentesco',s.guardianRelation,'Madre / Padre…')}</div>
+        <div class="frow c2">${F('sp_gphone','Tel. acudiente',s.guardianPhone)}${F('sp_gemail','Email acudiente',s.guardianEmail)}</div>
+        <div class="frow c2">${F('sp_emerg','Contacto de emergencia',s.emergency)}${F('sp_ephone','Tel. emergencia',s.emergencyPhone)}</div></div>
+      <div class="field"><label>📝 Información a tener en cuenta</label><textarea id="sp_notes" placeholder="Observaciones importantes, recomendaciones, comportamiento, etc.">${esc(s.notes||'')}</textarea></div>
+    </div>
+    <div class="modal-foot"><div class="fill"></div><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-blue" onclick="saveStudentProfile()">Guardar</button></div></div>`);
+}
+function saveStudentProfile(){
+  const p=getProg();
+  if(!checkRequired([['sp_name','Nombre completo']])) return;
+  p.student={ fullName:val('sp_name'),birthdate:val('sp_birth'),gender:val('sp_gender'),nationality:val('sp_nat'),languages:val('sp_lang'),
+    docType:val('sp_doctype'),docNumber:val('sp_docnum'),passport:val('sp_pass'),passportExp:val('sp_passexp'),
+    email:val('sp_email'),phone:val('sp_phone'),city:val('sp_city'),address:val('sp_addr'),school:val('sp_school'),level:val('sp_level'),
+    bloodType:val('sp_blood'),allergies:val('sp_allergy'),medical:val('sp_medical'),dietary:val('sp_diet'),insurer:val('sp_insurer'),policyNumber:val('sp_policy'),
+    guardianName:val('sp_gname'),guardianRelation:val('sp_grel'),guardianPhone:val('sp_gphone'),guardianEmail:val('sp_gemail'),
+    emergency:val('sp_emerg'),emergencyPhone:val('sp_ephone'),notes:val('sp_notes') };
+  closeModal(); toast('✓ Datos del estudiante guardados'); save();
 }
 
 /* ===================== NAV ACTIONS ===================== */
@@ -908,12 +1088,14 @@ function saveProgram(id){
       if(ex){ex.currency=r.currency;ex.startDate=r.start;ex.endDate=r.end;}
       else p.countries.push({id:uid(),name:r.name,currency:r.currency,startDate:r.start,endDate:r.end}); });
     p.countries=p.countries.filter(c=>rows.some(r=>r.name.toLowerCase()===c.name.toLowerCase()));
+    ensureDays(p);
     toast('✓ Programa actualizado');
   }else{
     const p={id:uid(),name,description:val('pf_desc'),startDate:val('pf_start'),endDate:val('pf_end'),
       coordinator:val('pf_coord'),coordPhone:val('pf_phone'),
       countries:rows.map(r=>({id:uid(),name:r.name,currency:r.currency,startDate:r.start,endDate:r.end})),
-      sections:[],schedule:[],budget:[],expenses:[],tasks:[],participants:[]};
+      sections:[],schedule:[],budget:[],expenses:[],tasks:[],participants:[],flights:[],student:{}};
+    ensureDays(p);
     state.programs.push(p); cur={view:'program',programId:p.id,tab:'resumen'};
     toast('🎉 Programa creado');
   }
@@ -979,40 +1161,82 @@ function saveSection(coId,secId){
 }
 function delSection(id){ const p=getProg(); if(!confirm('¿Eliminar sección?'))return; p.sections=p.sections.filter(s=>s.id!==id); save(); }
 
-/* ---- DAY (cronograma) ---- */
-function openDayForm(dayId){
-  const p=getProg(); const d=dayId?p.schedule.find(x=>x.id===dayId):null;
-  const cOpts='<option value="">— Selecciona país —</option>'+p.countries.map(c=>`<option value="${c.id}" ${d?.countryId===c.id?'selected':''}>${flagFor(c.name)} ${esc(c.name)}</option>`).join('');
-  showModal(`<div class="modal wide"><div class="modal-head"><h2>${d?'Editar día':'Nuevo día'}</h2><button class="x-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
+/* ---- DÍA: logística (única por día) ---- */
+function openDayLogi(dayId){
+  const p=getProg(); const d=p.schedule.find(x=>x.id===dayId); if(!d) return;
+  const co=p.countries.find(c=>c.id===d.countryId);
+  const cOpts='<option value="">— Sin país —</option>'+p.countries.map(c=>`<option value="${c.id}" ${d.countryId===c.id?'selected':''}>${flagFor(c.name)} ${esc(c.name)}</option>`).join('');
+  showModal(`<div class="modal wide"><div class="modal-head"><h2>Logística · ${fdate(d.date)}</h2><span class="step">${dow(d.date)}</span><button class="x-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
     <div class="modal-body">
-      <div class="frow c2"><div class="field"><label>País *</label><select id="d_country" onchange="syncDayRange()">${cOpts}</select></div>
-        <div class="field"><label>Fecha * <span class="hint" id="d_range"></span></label><input type="date" id="d_date" value="${d?.date||''}"></div></div>
-      <div class="field"><label>Actividad del día *</label><input id="d_act" value="${esc(d?.activity||'')}" placeholder="Visita guiada al centro histórico"></div>
-      <div class="frow c2"><div class="field"><label>🏨 Alojamiento *</label><input id="d_acc" value="${esc(d?.accommodation||'')}" placeholder="Hostel / Hotel / Casa familiar"></div>
-        <div class="field"><label>👤 Encargado *</label><input id="d_resp" value="${esc(d?.responsible||'')}" placeholder="Nombre del responsable"></div></div>
-      <div class="frow c2"><div class="field"><label>🚐 Transporte *</label><input id="d_trans" value="${esc(d?.transport||'')}" placeholder="Bus privado / Vuelo AV123 / A pie"></div>
-        <div class="field"><label>📍 Ubicación * <span class="hint">(se abre en Google Maps)</span></label><input id="d_loc" value="${esc(d?.location||'')}" placeholder="Dirección o lugar"></div></div>
-      <div class="field"><label>Notas</label><textarea id="d_notes" placeholder="Horarios, requisitos, contactos…">${esc(d?.notes||'')}</textarea></div>
+      <div class="help" style="margin:0 0 14px"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><div>Estos datos son <b>únicos para todo el día</b>. Las actividades (con su ubicación) se agregan aparte, y pueden ser varias.</div></div>
+      <div class="frow c2"><div class="field"><label>País</label><select id="dl_country">${cOpts}</select></div>
+        <div class="field"><label>👤 Encargado del día</label><input id="dl_resp" value="${esc(d.responsible||'')}" placeholder="Nombre del responsable"></div></div>
+      <div class="frow c2"><div class="field"><label>🏨 Alojamiento</label><input id="dl_acc" value="${esc(d.accommodation||'')}" placeholder="Hotel / Casa anfitriona / Residencia"></div>
+        <div class="field"><label>🚐 Transporte (terrestre)</label><input id="dl_trans" value="${esc(d.transport||'')}" placeholder="Bus, taxi, a pie… (los vuelos van aparte)"></div></div>
+      <div class="field"><label>Notas del día</label><textarea id="dl_notes" placeholder="Recordatorios generales del día…">${esc(d.notes||'')}</textarea></div>
     </div>
-    <div class="modal-foot"><div class="fill"></div><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-blue" onclick="saveDay(${dayId?`'${dayId}'`:'null'})">Guardar</button></div></div>`);
-  syncDayRange();
+    <div class="modal-foot"><div class="fill"></div><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-blue" onclick="saveDayLogi('${dayId}')">Guardar</button></div></div>`);
 }
-function syncDayRange(){
-  const p=getProg(); const co=p.countries.find(c=>c.id===val('d_country'));
-  const minD=co?co.startDate:p.startDate, maxD=co?co.endDate:p.endDate;
-  const el=document.getElementById('d_date'); el.min=minD||''; el.max=maxD||'';
-  const r=document.getElementById('d_range'); if(r) r.textContent=(minD&&maxD)?`(${fdate(minD)} – ${fdate(maxD)})`:'';
+function saveDayLogi(dayId){
+  const p=getProg(); const d=p.schedule.find(x=>x.id===dayId); if(!d) return;
+  d.countryId=val('dl_country'); d.responsible=val('dl_resp'); d.accommodation=val('dl_acc'); d.transport=val('dl_trans'); d.notes=val('dl_notes');
+  closeModal(); toast('✓ Logística guardada'); save();
 }
-function saveDay(dayId){
+
+/* ---- ACTIVIDAD (varias por día, con ubicación propia) ---- */
+function openActForm(dayId,actId){
+  const p=getProg(); const d=p.schedule.find(x=>x.id===dayId); if(!d) return;
+  const a=actId?(d.activities||[]).find(x=>x.id===actId):null;
+  showModal(`<div class="modal"><div class="modal-head"><h2>${a?'Editar actividad':'Nueva actividad'} · ${fdate(d.date)}</h2><button class="x-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <div class="frow c2" style="grid-template-columns:120px 1fr"><div class="field"><label>Hora</label><input type="time" id="ac_time" value="${a?.time||''}"></div>
+        <div class="field"><label>Actividad *</label><input id="ac_name" value="${esc(a?.name||'')}" placeholder="Clase de español / Tour / Reunión"></div></div>
+      <div class="field"><label>📍 Ubicación <span class="hint">(propia de esta actividad — abre Google Maps)</span></label><input id="ac_loc" value="${esc(a?.location||'')}" placeholder="Dirección o nombre del lugar"></div>
+      <div class="field"><label>Nota</label><input id="ac_notes" value="${esc(a?.notes||'')}" placeholder="Llevar documento, costo incluido, etc."></div>
+    </div>
+    <div class="modal-foot"><div class="fill"></div><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-blue" onclick="saveAct('${dayId}',${actId?`'${actId}'`:'null'})">Guardar</button></div></div>`);
+}
+function saveAct(dayId,actId){
+  const p=getProg(); const d=p.schedule.find(x=>x.id===dayId); if(!d) return;
+  if(!checkRequired([['ac_name','Actividad']])) return;
+  const data={time:val('ac_time'),name:val('ac_name'),location:val('ac_loc'),notes:val('ac_notes')};
+  if(!d.activities) d.activities=[];
+  if(actId){ Object.assign(d.activities.find(x=>x.id===actId),data); } else d.activities.push({id:uid(),...data});
+  closeModal(); toast('✓ Actividad guardada'); save();
+}
+function delAct(dayId,actId){ const p=getProg(); const d=p.schedule.find(x=>x.id===dayId); if(!d)return; if(!confirm('¿Eliminar esta actividad?'))return; d.activities=d.activities.filter(a=>a.id!==actId); save(); }
+
+/* ---- VUELOS ---- */
+function openFlightForm(fId){
+  const p=getProg(); const f=fId?(p.flights||[]).find(x=>x.id===fId):null;
+  showModal(`<div class="modal wide"><div class="modal-head"><h2>${f?'Editar vuelo':'Nuevo vuelo'}</h2><button class="x-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <div class="frow c2"><div class="field"><label>Fecha del vuelo *</label><input type="date" id="fl_date" value="${f?.date||''}" min="${p.startDate||''}" max="${p.endDate||''}"></div>
+        <div class="field"><label>Aerolínea</label><input id="fl_airline" value="${esc(f?.airline||'')}" placeholder="Avianca, LATAM…"></div></div>
+      <div class="frow c2"><div class="field"><label>N° de vuelo</label><input id="fl_no" value="${esc(f?.flightNo||'')}" placeholder="AV8420"></div>
+        <div class="field"><label>Código de confirmación</label><input id="fl_conf" value="${esc(f?.confirmation||'')}" placeholder="ABC123"></div></div>
+      <div class="frow c2"><div class="field"><label>Ciudad origen *</label><input id="fl_fromcity" value="${esc(f?.fromCity||'')}" placeholder="Bogotá"></div>
+        <div class="field"><label>Aeropuerto origen</label><input id="fl_fromair" value="${esc(f?.fromAirport||'')}" placeholder="BOG / El Dorado"></div></div>
+      <div class="frow c2"><div class="field"><label>Ciudad destino *</label><input id="fl_tocity" value="${esc(f?.toCity||'')}" placeholder="Ciudad de México"></div>
+        <div class="field"><label>Aeropuerto destino</label><input id="fl_toair" value="${esc(f?.toAirport||'')}" placeholder="MEX / Benito Juárez"></div></div>
+      <div class="frow c2"><div class="field"><label>Hora de salida</label><input type="time" id="fl_dep" value="${f?.depTime||''}"></div>
+        <div class="field"><label>Hora de llegada</label><input type="time" id="fl_arr" value="${f?.arrTime||''}"></div></div>
+      <div class="field"><label>Notas</label><input id="fl_notes" value="${esc(f?.notes||'')}" placeholder="Equipaje, escala, terminal…"></div>
+    </div>
+    <div class="modal-foot"><div class="fill"></div><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-blue" onclick="saveFlight(${fId?`'${fId}'`:'null'})">Guardar</button></div></div>`);
+}
+function saveFlight(fId){
   const p=getProg();
-  if(!checkRequired([['d_country','País'],['d_date','Fecha'],['d_act','Actividad del día'],['d_acc','Alojamiento'],['d_resp','Encargado'],['d_trans','Transporte'],['d_loc','Ubicación']])) return;
-  const co=p.countries.find(c=>c.id===val('d_country'));
-  if(co && !checkRange('d_date',co.startDate,co.endDate,'La fecha del día')) return;
-  const data={date:val('d_date'),countryId:val('d_country'),activity:val('d_act'),accommodation:val('d_acc'),responsible:val('d_resp'),transport:val('d_trans'),location:val('d_loc'),notes:val('d_notes')};
-  if(dayId){ Object.assign(p.schedule.find(x=>x.id===dayId),data); } else p.schedule.push({id:uid(),...data});
-  closeModal(); toast('✓ Día guardado'); save();
+  if(!checkRequired([['fl_date','Fecha del vuelo'],['fl_fromcity','Ciudad origen'],['fl_tocity','Ciudad destino']])) return;
+  if(!checkRange('fl_date',p.startDate,p.endDate,'La fecha del vuelo')) return;
+  const data={date:val('fl_date'),airline:val('fl_airline'),flightNo:val('fl_no'),confirmation:val('fl_conf'),
+    fromCity:val('fl_fromcity'),fromAirport:val('fl_fromair'),toCity:val('fl_tocity'),toAirport:val('fl_toair'),
+    depTime:val('fl_dep'),arrTime:val('fl_arr'),notes:val('fl_notes')};
+  if(!p.flights) p.flights=[];
+  if(fId){ Object.assign(p.flights.find(x=>x.id===fId),data); } else p.flights.push({id:uid(),...data});
+  closeModal(); toast('✓ Vuelo guardado'); save();
 }
-function delDay(id){ const p=getProg(); if(!confirm('¿Eliminar este día?'))return; p.schedule=p.schedule.filter(d=>d.id!==id); save(); }
+function delFlight(id){ const p=getProg(); if(!confirm('¿Eliminar este vuelo?'))return; p.flights=p.flights.filter(f=>f.id!==id); save(); }
 
 /* ---- BUDGET ---- */
 function openBudgetForm(bId){
@@ -1047,7 +1271,7 @@ function openExpenseForm(eId){
   const catOpts=CATS.map(c=>`<option ${e?.category===c?'selected':''}>${c}</option>`).join('');
   const curOpts=CURRENCIES.map(c=>`<option value="${c}" ${e?.currency===c?'selected':''}>${c}</option>`).join('');
   const coOpts='<option value="">— Selecciona —</option>'+p.countries.map(c=>`<option ${e?.country===c.name?'selected':''}>${esc(c.name)}</option>`).join('');
-  const payers=[...new Set([...p.participants.map(s=>s.name),p.coordinator].filter(Boolean))];
+  const payers=[...new Set([p.student&&p.student.fullName, ...p.participants.map(s=>s.name), p.coordinator].filter(Boolean))];
   showModal(`<div class="modal wide"><div class="modal-head"><h2>${e?'Editar gasto':'Registrar gasto'}</h2><button class="x-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
     <div class="modal-body">
       <div class="frow c3"><div class="field"><label>Fecha *</label><input type="date" id="e_date" value="${e?.date||new Date().toISOString().slice(0,10)}"></div>
@@ -1159,3 +1383,4 @@ function toast(msg){
 </script>
 </body>
 </html>
+
